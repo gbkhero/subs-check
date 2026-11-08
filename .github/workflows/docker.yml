@@ -8,6 +8,10 @@ on:
         required: false
         default: latest
         type: string
+  # 推送 docker-* 标签即可发布镜像，例如: git push origin docker-20261108
+  push:
+    tags:
+      - 'docker-*'
 
 permissions:
   contents: read
@@ -43,7 +47,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=${{ inputs.image-tag }}
+            type=raw,value=${{ inputs.image-tag || 'latest' }}
             type=sha,prefix=sha-,format=short
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
