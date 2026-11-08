@@ -52,7 +52,7 @@ func MatchesFilter(r Result, patterns []*regexp.Regexp) bool {
 //
 // 只有渲染后的展示名(不含速度标签)匹配任一正则的节点才会被保留。
 // 这里用 RenderName(r, false) 而不是 r.Proxy["name"] 是为了让 filter 能看到
-// 国家+媒体标签的完整视图,同时保持 proxy["name"] 不被修改。
+// 国家+延迟+媒体标签的完整视图,同时保持 proxy["name"] 不被修改。
 func FilterResults(results []Result) []Result {
 	patterns := CompileFilterPatterns()
 	if len(patterns) == 0 {

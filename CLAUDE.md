@@ -60,15 +60,16 @@ go vet ./...
    - `success-limit` 命中或外部取消（SIGHUP / HTTP `/api/force-close`）会取消同一个 `context`；中间阶段 ctx-aware 丢弃，最后一段到 collector 的发送是无条件的，保证已判定通过的节点不丢。
    - 进度与各阶段计数是包级 atomic（`Progress`、`Available`、`MediaDone`、`FilterPassed`、`SpeedDone`、`SpeedOk`、`PhaseResults`），CLI 进度条和 `/api/status` 共用。
 5. 每个探针通过 `check.CreateClient` 用 mihomo `adapter.ParseProxy` 构造独立 `http.Client`：自定义 `DialContext`、按节点统计字节数、全局限速 bucket；`watchdog` 会在远超所有超时后强制关闭卡死的底层 transport。
-6. `checkMedia` 按 `platforms` 顺序并行检测，永不丢弃节点；`checkSpeed` 才按 `min-speed` 决定去留。
+6. `checkAlive` 在存活检测时测量请求耗时并写入 `Result.Delay`（毫秒，最小 1），该值直接用于节点命名。
+7. `checkMedia` 按 `platforms` 顺序并行检测，永不丢弃节点；`checkSpeed` 才按 `min-speed` 决定去留。
 
 **测试模式**：`SUB_CHECK_SKIP=1` 让 alive/media/speed 全部直接通过，流水线单测依赖它；测试里用 `t.Setenv` + `check/render_test.go` 的 `withConfig` 还原全局配置，`app/router_test.go` 的 `newTestRouter` 用 `t.Cleanup` 还原配置与 `save.ResultsPath`。
 
 ## 命名、过滤与结果契约
 
-- `check.RenderNameParts` 是唯一的节点展示名生成出口，格式为 `base|speed|media...|sub_tag`，纯函数。
+- `check.RenderNameParts` 是唯一的节点展示名生成出口，格式为 `base|delay|speed|media...|sub_tag`，纯函数。延迟由测活阶段测量（`Result.Delay`，毫秒），已知后即参与 filter；速度标签只在最终输出时追加。
 - `rename-node=true` 时 base 被国家重命名**强覆盖**（`NodePrefix + flag + 国家_N`），避免上游已有的尾缀叠加。
-- filter 在流媒体检测之后、测速之前执行，匹配的是**不含速度标签**的渲染名；`MatchesFilter`/`FilterResults` 不要改成直接读 `proxy["name"]`。
+- filter 在流媒体检测之后、测速之前执行，匹配的是**含延迟、不含速度标签**的渲染名；`MatchesFilter`/`FilterResults` 不要改成直接读 `proxy["name"]`。
 - `save.SaveConfig` 的顺序是隐式契约：先用原始 name 写 history → 再原地把 `proxy["name"]` 改成展示名并写 `results.json` → 最后序列化 `all.yaml`、推送 Sub-Store、拉取 `mihomo.yaml`/`base64.txt`、上传远程存储。调用后 `results` 视为已消费。
 
 ## 保存与导出

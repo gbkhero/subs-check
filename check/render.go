@@ -15,17 +15,19 @@ import (
 //   - 不读写 proxy map 的 name 字段,不修改 Result
 //   - 仅依赖传入的 Result 和 config.GlobalConfig
 //
-// includeSpeed 为 true 时追加速度标签,只在最终输出 all.yaml 时用。
+// 延迟标签在测活阶段就已确定,filter 与最终输出都会带上。
+// includeSpeed 为 true 时再追加速度标签,只在最终输出 all.yaml 时用;
 // filter 阶段应该传 false,因为此时尚未测速。
 func RenderName(r Result, includeSpeed bool) string {
 	return RenderNameParts(r, includeSpeed).String()
 }
 
 // NameParts is the structured form of a display name; String() joins it as
-// "base|speed|media...|sub_tag". Render once when both are needed: with
+// "base|delay|speed|media...|sub_tag". Render once when both are needed: with
 // RenameNode on, every render bumps the node counter.
 type NameParts struct {
 	Base     string
+	DelayTag string     // set when the alive check measured a delay
 	SpeedTag string     // set when includeSpeed and the node has a speed
 	Media    []MediaTag // config.Platforms order; misses kept with an empty Tag
 	SubTag   string
@@ -39,6 +41,9 @@ type MediaTag struct {
 
 func (p NameParts) String() string {
 	var tags []string
+	if p.DelayTag != "" {
+		tags = append(tags, p.DelayTag)
+	}
 	if p.SpeedTag != "" {
 		tags = append(tags, p.SpeedTag)
 	}
@@ -73,17 +78,20 @@ func RenderNameParts(r Result, includeSpeed bool) NameParts {
 		}
 	}
 
-	// 2. 速度标签(仅 includeSpeed 且有速度时追加,放在媒体标签之前以保持与旧版相同的展示顺序)
+	// 2. 延迟标签(测活阶段已测得，filter 和最终输出都能看到)
+	p.DelayTag = formatDelayTag(r.Delay)
+
+	// 3. 速度标签(仅 includeSpeed 且有速度时追加,放在媒体标签之前以保持与旧版相同的展示顺序)
 	if includeSpeed && config.GlobalConfig.SpeedTestUrl != "" && r.Speed > 0 {
 		p.SpeedTag = formatSpeedTag(r.Speed)
 	}
 
-	// 3. 按 config.Platforms 顺序收集媒体标签
+	// 4. 按 config.Platforms 顺序收集媒体标签
 	for _, plat := range config.GlobalConfig.Platforms {
 		p.Media = append(p.Media, MediaTag{Platform: plat, Tag: mediaTagFor(plat, &r)})
 	}
 
-	// 4. sub_tag 追加到最后
+	// 5. sub_tag 追加到最后
 	if r.Proxy != nil {
 		if t, ok := r.Proxy["sub_tag"].(string); ok && t != "" {
 			p.SubTag = t
@@ -157,6 +165,14 @@ func mediaTagFor(plat string, r *Result) string {
 		}
 	}
 	return ""
+}
+
+// formatDelayTag 把测活耗时(ms)格式化为展示字符串；0 表示未测或跳过，不加标签。
+func formatDelayTag(delay int) string {
+	if delay <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%dms", delay)
 }
 
 // formatSpeedTag 把测速结果(KB/s)格式化为展示字符串。

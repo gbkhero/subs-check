@@ -40,12 +40,14 @@ type Result struct {
 	IP         string
 	IPRisk     string
 	Country    string
+	Delay      int // ms, 测活请求耗时; 0 表示未测或跳过
 	Speed      int // KB/s, 0 表示未测速或测速未通过
 }
 
 // aliveResult 存活检测通过的中间结果
 type aliveResult struct {
 	Proxy map[string]any
+	Delay int // ms
 }
 
 // ProxyChecker 处理代理检测的主要结构体
@@ -536,12 +538,17 @@ func (pc *ProxyChecker) checkAlive(proxy map[string]any) *aliveResult {
 	}
 	defer httpClient.Close()
 
+	start := time.Now()
 	alive, err := platform.CheckAlive(httpClient.Client)
 	if err != nil || !alive {
 		return nil
 	}
+	delay := int(time.Since(start).Milliseconds())
+	if delay < 1 {
+		delay = 1
+	}
 
-	return &aliveResult{Proxy: proxy}
+	return &aliveResult{Proxy: proxy, Delay: delay}
 }
 
 // checkSpeed 对已有的 Result 执行测速。
@@ -574,7 +581,7 @@ func (pc *ProxyChecker) checkSpeed(r Result, speedTestURL string) *Result {
 // 不会丢弃节点,不会修改 proxy["name"];检测结果写入 Result 的结构化字段。
 // Counter updates are owned by the caller (media pipeline worker).
 func (pc *ProxyChecker) checkMedia(a aliveResult) *Result {
-	res := &Result{Proxy: a.Proxy}
+	res := &Result{Proxy: a.Proxy, Delay: a.Delay}
 
 	if os.Getenv("SUB_CHECK_SKIP") != "" {
 		return res

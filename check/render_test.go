@@ -267,6 +267,63 @@ func TestRenderName_RenameOnButEmptyCountry_UsesOtherFallback(t *testing.T) {
 	})
 }
 
+func TestRenderName_DelayTag(t *testing.T) {
+	withConfig(t, config.Config{
+		RenameNode: false,
+		Platforms:  []string{},
+	}, func() {
+		r := Result{
+			Proxy: map[string]any{"name": "n"},
+			Delay: 123,
+		}
+		got := RenderName(r, false)
+		want := "n|123ms"
+		if got != want {
+			t.Errorf("RenderName() = %q, want %q", got, want)
+		}
+	})
+}
+
+func TestRenderName_DelayZero_NoDelayTag(t *testing.T) {
+	// SUB_CHECK_SKIP 或未测量时 Delay=0,不加标签
+	withConfig(t, config.Config{
+		RenameNode: false,
+		Platforms:  []string{},
+	}, func() {
+		r := Result{
+			Proxy: map[string]any{"name": "n"},
+			Delay: 0,
+		}
+		got := RenderName(r, false)
+		want := "n"
+		if got != want {
+			t.Errorf("RenderName() = %q, want %q", got, want)
+		}
+	})
+}
+
+func TestRenderName_DelayBeforeSpeedAndMedia(t *testing.T) {
+	// 锁定标签顺序: base | delay | speed | media-tags | sub_tag
+	withConfig(t, config.Config{
+		RenameNode:   false,
+		SpeedTestUrl: "https://example.com/file",
+		Platforms:    []string{"openai", "netflix"},
+	}, func() {
+		r := Result{
+			Proxy:   map[string]any{"name": "n", "sub_tag": "tag"},
+			Delay:   123,
+			Speed:   5120, // 5.0MB/s
+			Openai:  &platform.OpenAIResult{Full: true, Region: "HK"},
+			Netflix: &platform.NetflixResult{Full: true, Region: "HK"},
+		}
+		got := RenderName(r, true)
+		want := "n|123ms|5.0MB/s|GPT⁺-HK|NF-HK|tag"
+		if got != want {
+			t.Errorf("RenderName() = %q, want %q", got, want)
+		}
+	})
+}
+
 func TestRenderNameParts_MatchesRenderName(t *testing.T) {
 	withConfig(t, config.Config{
 		RenameNode:   false,
@@ -275,6 +332,7 @@ func TestRenderNameParts_MatchesRenderName(t *testing.T) {
 	}, func() {
 		r := Result{
 			Proxy:   map[string]any{"name": "🇭🇰香港01", "sub_tag": "机场A"},
+			Delay:   88,
 			Speed:   2048,
 			Netflix: &platform.NetflixResult{Full: true, Region: "HK"},
 		}
@@ -282,7 +340,7 @@ func TestRenderNameParts_MatchesRenderName(t *testing.T) {
 		if got, want := p.String(), RenderName(r, true); got != want {
 			t.Errorf("NameParts.String() = %q, RenderName() = %q", got, want)
 		}
-		if p.Base != "🇭🇰香港01" || p.SpeedTag != "2.0MB/s" || p.SubTag != "机场A" {
+		if p.Base != "🇭🇰香港01" || p.DelayTag != "88ms" || p.SpeedTag != "2.0MB/s" || p.SubTag != "机场A" {
 			t.Errorf("parts = %+v", p)
 		}
 		// Misses are kept so the page can show "not unlocked".

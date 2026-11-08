@@ -23,7 +23,7 @@ type SaveFunc func(data []byte, filename string) error
 //  1. 先把 results 序列化保存到 history(此时 proxy["name"] 仍是原始名,
 //     history 文件天然干净,keep-days 下次加载时不会累积标签)
 //  2. 然后原地 mutate 每个 result.Proxy["name"] 为最终展示名
-//     (调 check.RenderName 生成 base + 媒体标签 + 速度标签 + sub_tag)
+//     (调 check.RenderName 生成 base + 延迟标签 + 速度标签 + 媒体标签 + sub_tag)
 //  3. 最后用 mutate 过的 results 序列化成 all.yaml、mihomo.yaml、base64.txt
 //     并写本地 / 远程 / SubStore
 //
